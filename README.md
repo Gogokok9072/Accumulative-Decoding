@@ -5,7 +5,7 @@
 <h3>Mitigating Hallucinations in Large Vision-Language Models via Accumulative Decoding</h3>
 
 <p>
-  <a href="https://arxiv.org/abs/your-paper-id"><img src="https://img.shields.io/badge/arXiv-Paper-b31b1b?style=flat-square&logo=arxiv" alt="Paper"/></a>
+  <a href="https://ieeexplore.ieee.org/xpl/conhome/11283134/proceeding"><img src="https://img.shields.io/badge/IEEE-Paper-00629B?style=flat-square&logo=ieee&logoColor=white" alt="Paper"/></a>
   &nbsp;
   <a href="#"><img src="https://img.shields.io/badge/Python-3.9%2B-3776ab?style=flat-square&logo=python&logoColor=white" alt="Python"/></a>
   &nbsp;
